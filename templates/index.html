@@ -22,7 +22,7 @@
     <div class="main-container">
         <div class="sidebar">
             <button id="startButton" class="mic-button">Start Voice Agent</button>
-            <div id="currentIndustryDisplay" class="current-industry">Industry: <span>Tech Support</span></div>
+            <div id="currentIndustryDisplay" class="current-industry">Industry: <span>The Joint Chiropractic</span></div>
             <button id="industryButton" class="industry-button">Change Industry</button>
             <div id="status" class="status">Microphone: Not active</div>
             <div class="audio-controls">
@@ -75,7 +75,7 @@
                                 <strong>Orders:</strong>
                                 {% for order in customer.Orders %}
                                 <div>{{ order.ID }}</div>
-                                <div>- Items: {{ order['# Items'] }}</div>
+                                <div>- Item: {{ order.Item }}</div>
                                 <div>- Total: {{ order.Total }}</div>
                                 <div>- Status: {{ order.Status }}</div>
                                 <div>- Date: {{ order.Date }}</div>
@@ -121,9 +121,9 @@
         let messageCounter = 0;
         const messageHeights = new Map(); // Store heights by counter
         const messageOrder = []; // Keep track of message order
-        let currentIndustry = 'deepgram'; // Default industry
-        let currentIndustryName = 'Deepgram'; // Default industry name
-        let currentVoiceModel = 'aura-2-thalia-en'; // Default voice model
+        let currentIndustry = 'joint-chiropractic'; // Default industry
+        let currentIndustryName = 'The Joint Chiropractic'; // Default industry name
+        let currentVoiceModel = 'aura-2-odysseus-en'; // Default voice model
         let currentVoiceName = ''; // Will be populated from the model name
 
         // Populate audio devices
@@ -737,7 +737,8 @@ async function loadAudioDevices() {
         let audioOutputQueue = [];
         let isAudioOutputPlaying = false;
         let nextPlayTime = 0; // Track when the next audio chunk should start
-        let audioOutputSampleRate = 16000; // Default, will be updated from server
+        let audioOutputSampleRate = 24000; // Default, will be updated from server
+        let audioChunkCounter = 0; // Debug counter for audio chunks
         
         // Function to play audio output received from the server
         function playAudioOutput(audioData, sampleRate) {
@@ -808,11 +809,8 @@ async function loadAudioDevices() {
                 // Update nextPlayTime for the next chunk
                 nextPlayTime += bufferDuration;
                 
-                // Clean up old scheduled times if they're getting too far ahead
-                const maxLookahead = 1.0; // Maximum 1 second lookahead
-                if (nextPlayTime > currentTime + maxLookahead) {
-                    nextPlayTime = currentTime + 0.1; // Reset with small buffer
-                }
+                // REMOVED problematic lookahead reset that was causing audio chunks to overlap
+                // Just let the audio play sequentially without arbitrary resets
                 
             } catch (err) {
                 console.error('Error scheduling audio buffer:', err);
@@ -823,8 +821,9 @@ async function loadAudioDevices() {
         
         // Clean up audio output resources
         function stopAudioOutput() {
-            // Reset timing
+            // Reset timing completely
             nextPlayTime = 0;
+            audioChunkCounter = 0;
             
             // Close the audio context to release resources
             if (audioOutputContext && audioOutputContext.state !== 'closed') {
@@ -833,11 +832,12 @@ async function loadAudioDevices() {
             }
             
             // Reset variables
-            audioOutputSampleRate = 16000;
+            audioOutputSampleRate = 24000;
         }
 
         socket.on('audio_output', (data) => {
             if (isActive) {
+                console.log('🎵 BROWSER: Received audio_output event, playing via Web Audio API');
                 playAudioOutput(data.audio, data.sampleRate);
             }
         });

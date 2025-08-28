@@ -437,8 +437,10 @@ def _play(audio_out, stream, stop, browser_output=False):
     while not stop.is_set():
         try:
             data = audio_out.sync_q.get(True, 0.05)
-            # Play audio through system speakers
-            stream.write(data)
+            
+            # Only play through system speakers if browser output is disabled
+            if not browser_output:
+                stream.write(data)
 
             # If browser output is enabled, send audio to browser via WebSocket
             if browser_output and socketio:

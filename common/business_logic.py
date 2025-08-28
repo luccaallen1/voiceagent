@@ -41,15 +41,22 @@ def generate_mock_data():
     appointments = []
     orders = []
 
+    # Realistic names for chiropractic patients
+    first_names = ["Sarah", "Mike", "Jennifer", "David", "Lisa", "John", "Maria", "Robert", "Emma", "James", "Ashley", "Michael", "Jessica", "Chris", "Amanda", "Daniel", "Michelle", "Ryan", "Stephanie", "Kevin"]
+    last_names = ["Johnson", "Smith", "Williams", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin", "Thompson", "Garcia", "Martinez", "Robinson", "Clark"]
+
     # Generate customers
     for i in range(MOCK_DATA_SIZE["customers"]):
+        first_name = random.choice(first_names)
+        last_name = random.choice(last_names)
+        full_name = f"{first_name} {last_name}"
         customer = {
             "id": f"CUST{i:04d}",
-            "name": f"Customer {i}",
-            "phone": f"+1555{i:07d}",
-            "email": f"customer{i}@example.com",
+            "name": full_name,
+            "phone": f"+1256{i:07d}",  # Using 256 area code for Gadsden, AL
+            "email": f"{first_name.lower()}.{last_name.lower()}@email.com",
             "joined_date": (
-                datetime.now() - timedelta(days=random.randint(0, 7))
+                datetime.now() - timedelta(days=random.randint(0, 365))
             ).isoformat(),
         }
         customers.append(customer)
@@ -61,25 +68,42 @@ def generate_mock_data():
             "id": f"APT{i:04d}",
             "customer_id": customer["id"],
             "customer_name": customer["name"],
-            "date": (datetime.now() + timedelta(days=random.randint(0, 7))).isoformat(),
-            "service": random.choice(
-                ["Consultation", "Follow-up", "Review", "Planning"]
-            ),
+            "date": (datetime.now() + timedelta(days=random.randint(0, 14))).isoformat(),
+            "service": random.choice([
+                "Initial Consultation", 
+                "Chiropractic Adjustment", 
+                "Follow-up Visit", 
+                "Wellness Check", 
+                "Maintenance Care",
+                "Pain Assessment"
+            ]),
             "status": random.choice(["Scheduled", "Completed", "Cancelled"]),
         }
         appointments.append(appointment)
 
-    # Generate orders
+    # Generate orders (wellness products and treatment packages)
     for i in range(MOCK_DATA_SIZE["orders"]):
         customer = random.choice(customers)
+        # Chiropractic practice items/packages
+        treatment_packages = [
+            {"name": "4-Visit Adjustment Package", "price": 120.00},
+            {"name": "Initial Exam + Adjustment", "price": 29.00},
+            {"name": "Lumbar Support Pillow", "price": 45.00},
+            {"name": "Posture Corrector", "price": 35.00},
+            {"name": "Ice Pack Therapy Kit", "price": 25.00},
+            {"name": "6-Visit Wellness Plan", "price": 180.00},
+            {"name": "Ergonomic Assessment", "price": 75.00},
+        ]
+        selected_package = random.choice(treatment_packages)
         order = {
             "id": f"ORD{i:04d}",
             "customer_id": customer["id"],
             "customer_name": customer["name"],
-            "date": (datetime.now() - timedelta(days=random.randint(0, 7))).isoformat(),
-            "items": random.randint(1, 5),
-            "total": round(random.uniform(10.0, 500.0), 2),
-            "status": random.choice(["Pending", "Shipped", "Delivered", "Cancelled"]),
+            "date": (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat(),
+            "items": 1,  # Most orders are single packages or products
+            "item_name": selected_package["name"],
+            "total": selected_package["price"],
+            "status": random.choice(["Completed", "Active", "Expired"]),
         }
         orders.append(order)
 
@@ -115,10 +139,10 @@ def generate_mock_data():
             customer_data["Orders"].append(
                 {
                     "ID": order["id"],
-                    "Total": f"${order['total']}",
+                    "Item": order.get("item_name", "Unknown Item"),
+                    "Total": f"${order['total']:.2f}",
                     "Status": order["status"],
                     "Date": order["date"][:10],
-                    "# Items": order["items"],
                 }
             )
 

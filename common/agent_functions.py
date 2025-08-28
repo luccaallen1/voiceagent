@@ -86,23 +86,174 @@ async def end_call(websocket, params):
     return result
 
 
-# Function definitions that will be sent to the Voice Agent API
+async def check_date(params):
+    """Convert natural date text to YYYY-MM-DD format in clinic timezone."""
+    from datetime import datetime, timedelta
+    
+    text = params.get("text", "").lower()
+    
+    # Get today's date
+    today = datetime.now()
+    
+    # Parse natural language dates
+    if "today" in text:
+        target_date = today
+    elif "tomorrow" in text:
+        target_date = today + timedelta(days=1)
+    elif "monday" in text:
+        days_ahead = 0 - today.weekday()
+        if days_ahead <= 0:  # Target day already happened this week
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    elif "tuesday" in text:
+        days_ahead = 1 - today.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    elif "wednesday" in text:
+        days_ahead = 2 - today.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    elif "thursday" in text:
+        days_ahead = 3 - today.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    elif "friday" in text:
+        days_ahead = 4 - today.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    elif "saturday" in text:
+        days_ahead = 5 - today.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    elif "sunday" in text:
+        days_ahead = 6 - today.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        target_date = today + timedelta(days=days_ahead)
+    else:
+        # Default to tomorrow if can't parse
+        target_date = today + timedelta(days=1)
+    
+    return {"date": target_date.strftime("%Y-%m-%d")}
+
+
+async def bookings(params):
+    """Get available appointment slots for a specific date."""
+    date = params.get("date")  # Expected format: YYYY-MM-DD
+    
+    if not date:
+        return {"error": "Date is required"}
+    
+    # Use the existing availability checker with date range
+    start_date = f"{date}T00:00:00"
+    end_date = f"{date}T23:59:59"
+    
+    result = await get_available_appointment_slots(start_date, end_date)
+    
+    # Convert to the expected format - list of times in HH:MM format
+    if "available_slots" in result:
+        times = []
+        for slot in result["available_slots"]:
+            # Extract time from ISO datetime
+            time_part = slot.split("T")[1].split(":")[0:2]  # Get HH:MM
+            time_str = ":".join(time_part)
+            times.append(time_str)
+        return {"times": times}
+    
+    return {"times": []}
+
+
+async def create_event(params):
+    """Create an appointment event with customer details."""
+    name = params.get("name")
+    email_lowercase = params.get("email_lowercase")
+    phone = params.get("phone") 
+    start_time = params.get("start_time")  # Expected: YYYY-MM-DDTHH:MM
+    
+    if not all([name, email_lowercase, phone, start_time]):
+        return {"error": "All fields are required: name, email_lowercase, phone, start_time"}
+    
+    # For this demo, we'll create a mock booking
+    # In a real system, this would integrate with calendar/booking system
+    
+    booking_id = f"BOOK{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    return {
+        "success": True,
+        "booking_id": booking_id,
+        "name": name,
+        "email": email_lowercase,
+        "phone": phone,
+        "appointment_time": start_time,
+        "message": f"Appointment booked for {name} on {start_time}"
+    }
+
+
+# Function definitions that will be sent to the Voice Agent API  
 FUNCTION_DEFINITIONS = [
     {
-        "name": "agent_filler",
-        "description": """Use this function to provide natural conversational filler before looking up information.
-        ALWAYS call this function first with message_type='lookup' when you're about to look up customer information.
-        After calling this function, you MUST immediately follow up with the appropriate lookup function (e.g., find_customer).""",
+        "name": "check_date",
+        "description": """Convert natural date expressions into YYYY-MM-DD format in clinic timezone.
+        Input natural language like 'today', 'tomorrow', 'Monday', 'next Tuesday', 'July 22nd'.
+        Returns standardized date format for use with bookings function.""",
         "parameters": {
             "type": "object",
             "properties": {
-                "message_type": {
+                "text": {
                     "type": "string",
-                    "description": "Type of filler message to use. Use 'lookup' when about to search for information.",
-                    "enum": ["lookup", "general"],
+                    "description": "Natural language date expression (e.g., 'tomorrow', 'Monday', 'next week')",
                 }
             },
-            "required": ["message_type"],
+            "required": ["text"],
+        },
+    },
+    {
+        "name": "bookings",
+        "description": """Get list of available appointment times for a specific date.
+        Input the YYYY-MM-DD date from check_date function.
+        Returns list of available start times in 24-hour HH:MM format.""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Date in YYYY-MM-DD format from check_date function",
+                }
+            },
+            "required": ["date"],
+        },
+    },
+    {
+        "name": "create_event",
+        "description": """Create an appointment booking with customer details.
+        Use after collecting customer information and time selection.
+        All fields are required for successful booking.""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Customer's full name as confirmed in spelling confirmation",
+                },
+                "email_lowercase": {
+                    "type": "string", 
+                    "description": "Customer's email address in lowercase",
+                },
+                "phone": {
+                    "type": "string",
+                    "description": "Customer's callback phone number",
+                },
+                "start_time": {
+                    "type": "string",
+                    "description": "Appointment start time in YYYY-MM-DDTHH:MM format (clinic timezone)",
+                },
+            },
+            "required": ["name", "email_lowercase", "phone", "start_time"],
         },
     },
     {
@@ -211,8 +362,8 @@ FUNCTION_DEFINITIONS = [
                 },
                 "service": {
                     "type": "string",
-                    "description": "Type of service requested. Must be one of the following: Consultation, Follow-up, Review, or Planning",
-                    "enum": ["Consultation", "Follow-up", "Review", "Planning"],
+                    "description": "Type of service requested. Must be one of the following: Initial Consultation, Chiropractic Adjustment, Follow-up Visit, Wellness Check, Maintenance Care, or Pain Assessment",
+                    "enum": ["Initial Consultation", "Chiropractic Adjustment", "Follow-up Visit", "Wellness Check", "Maintenance Care", "Pain Assessment"],
                 },
             },
             "required": ["customer_id", "date", "service"],
@@ -273,6 +424,9 @@ FUNCTION_DEFINITIONS = [
 
 # Map function names to their implementations
 FUNCTION_MAP = {
+    "check_date": check_date,
+    "bookings": bookings,
+    "create_event": create_event,
     "find_customer": find_customer,
     "get_appointments": get_appointments,
     "get_orders": get_orders,
