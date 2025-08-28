@@ -403,7 +403,7 @@ async def get_appointments_webhook(params):
 
 # WEBHOOK FUNCTION MAP - Use these instead of the mock functions
 WEBHOOK_FUNCTION_MAP = {
-    "check_date": check_date,  # Now using n8n webhook
+    # check_date is now client-side only (no webhook needed)
     "bookings": bookings,  # Now using n8n webhook
     "create_event": create_event,  # Now using n8n webhook
     "find_customer": find_customer_webhook,

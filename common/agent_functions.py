@@ -87,58 +87,68 @@ async def end_call(websocket, params):
 
 
 async def check_date(params):
-    """Convert natural date text to YYYY-MM-DD format in clinic timezone."""
+    """Parse natural language date/time into ISO 8601 format in clinic timezone (Central Time)."""
     from datetime import datetime, timedelta
+    import re
     
-    text = params.get("text", "").lower()
+    phrase = params.get("text", "").lower().strip()
+    reference_date = params.get("reference_date")
     
-    # Get today's date
-    today = datetime.now()
+    if not phrase:
+        return {"error": "phrase is required"}
     
-    # Parse natural language dates
-    if "today" in text:
-        target_date = today
-    elif "tomorrow" in text:
-        target_date = today + timedelta(days=1)
-    elif "monday" in text:
-        days_ahead = 0 - today.weekday()
-        if days_ahead <= 0:  # Target day already happened this week
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
-    elif "tuesday" in text:
-        days_ahead = 1 - today.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
-    elif "wednesday" in text:
-        days_ahead = 2 - today.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
-    elif "thursday" in text:
-        days_ahead = 3 - today.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
-    elif "friday" in text:
-        days_ahead = 4 - today.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
-    elif "saturday" in text:
-        days_ahead = 5 - today.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
-    elif "sunday" in text:
-        days_ahead = 6 - today.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-        target_date = today + timedelta(days=days_ahead)
+    # Use reference date if provided, otherwise current time in Central timezone
+    if reference_date:
+        try:
+            today = datetime.fromisoformat(reference_date.replace('Z', '+00:00')).replace(tzinfo=None)
+        except:
+            today = datetime.now()
     else:
-        # Default to tomorrow if can't parse
-        target_date = today + timedelta(days=1)
+        today = datetime.now()  # Clinic timezone (Central Time)
     
+    # Enhanced natural language parsing
+    target_date = None
+    
+    # Handle specific phrases
+    if any(word in phrase for word in ["today", "this morning", "this afternoon", "tonight"]):
+        target_date = today
+    elif any(word in phrase for word in ["tomorrow", "next day"]):
+        target_date = today + timedelta(days=1)
+    elif "day after tomorrow" in phrase:
+        target_date = today + timedelta(days=2)
+    elif "next week" in phrase:
+        target_date = today + timedelta(days=7)
+    elif "this week" in phrase:
+        target_date = today
+    
+    # Handle weekdays with "next" prefix
+    weekdays = {
+        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+        "friday": 4, "saturday": 5, "sunday": 6
+    }
+    
+    if not target_date:
+        for day_name, day_num in weekdays.items():
+            if day_name in phrase:
+                days_ahead = day_num - today.weekday()
+                if days_ahead <= 0 or "next" in phrase:
+                    days_ahead += 7  # Next occurrence
+                target_date = today + timedelta(days=days_ahead)
+                break
+    
+    # Handle relative dates
+    if not target_date:
+        if re.search(r'\d+\s*days?\s*(from\s*now|later)', phrase):
+            match = re.search(r'(\d+)\s*days?', phrase)
+            if match:
+                days = int(match.group(1))
+                target_date = today + timedelta(days=days)
+    
+    # Default fallback
+    if not target_date:
+        target_date = today + timedelta(days=1)  # Default to tomorrow
+    
+    # Return ISO format (YYYY-MM-DD for compatibility with bookings function)
     return {"date": target_date.strftime("%Y-%m-%d")}
 
 
@@ -198,19 +208,23 @@ async def create_event(params):
 FUNCTION_DEFINITIONS = [
     {
         "name": "check_date",
-        "description": """Convert natural date expressions into YYYY-MM-DD format in clinic timezone.
-        Input natural language like 'today', 'tomorrow', 'Monday', 'next Tuesday', 'July 22nd'.
-        Returns standardized date format for use with bookings function.""",
+        "description": """Parse natural language date/time like 'next Tuesday at 3pm' into YYYY-MM-DD format.
+        Handles phrases like 'today', 'tomorrow', 'Monday', 'next week', 'day after tomorrow', etc.
+        Returns standardized date format in clinic timezone (Central Time) for use with bookings function.""",
         "parameters": {
             "type": "object",
             "properties": {
                 "text": {
                     "type": "string",
-                    "description": "Natural language date expression (e.g., 'tomorrow', 'Monday', 'next week')",
+                    "description": "User-provided date/time phrase (e.g., 'tomorrow', 'next Monday', 'day after tomorrow')"
+                },
+                "reference_date": {
+                    "type": "string",
+                    "description": "ISO date used as 'today' context, e.g., 2025-08-28T00:00:00 (optional)"
                 }
             },
-            "required": ["text"],
-        },
+            "required": ["text"]
+        }
     },
     {
         "name": "bookings",
