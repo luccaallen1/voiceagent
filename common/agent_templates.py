@@ -54,6 +54,9 @@ LISTEN_SETTINGS = {
     "provider": {
         "type": "deepgram",
         "model": "nova-3",
+        "utterance_end_ms": 1000,  # Resilient to background noise, detects word gaps
+        "interim_results": True,   # Required for UtteranceEnd detection
+        "smart_format": True       # Cleaner punctuation
     }
 }
 
